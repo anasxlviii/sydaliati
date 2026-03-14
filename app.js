@@ -59,8 +59,13 @@ const dirSections = document.querySelectorAll('.directory-section');
 const dirTemplate = document.getElementById('directory-card-template');
 const specialtyFilter = document.getElementById('specialty-filter');
 
+const langToggle = document.getElementById('lang-toggle');
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize translations to default
+    setLanguage('fr');
+    
     initNavigation();
     initAuthForms();
     initTools();
@@ -68,6 +73,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Attach event for pharmacy locator
     if (locateBtn) {
         locateBtn.addEventListener('click', requestLocation);
+    }
+    
+    // Attach event for language toggle
+    if (langToggle) {
+        langToggle.addEventListener('change', (e) => {
+            setLanguage(e.target.value);
+        });
     }
 });
 
@@ -96,6 +108,49 @@ function initTools() {
             : doctorsData.filter(d => d.specialty === selected);
         renderDirectoryCards(filteredDocs, 'doctors-grid');
     });
+
+    // BMI Calculator Logic
+    const btnCalcBmi = document.getElementById('btn-calc-bmi');
+    if (btnCalcBmi) {
+        btnCalcBmi.addEventListener('click', () => {
+            const weight = parseFloat(document.getElementById('bmi-weight').value);
+            const heightCm = parseFloat(document.getElementById('bmi-height').value);
+            const resultDiv = document.getElementById('bmi-result');
+
+            if (!weight || !heightCm) {
+                resultDiv.textContent = currentLang === 'darija' ? "Khessek dkhl m3lomat" : "Veuillez remplir les deux champs.";
+                resultDiv.style.backgroundColor = "#FEF2F2";
+                resultDiv.style.color = "#EF4444";
+                resultDiv.classList.remove('hidden');
+                return;
+            }
+
+            const heightM = heightCm / 100;
+            const bmi = weight / (heightM * heightM);
+            let category = "";
+            let color = "";
+            let bgColor = "";
+
+            if (bmi < 18.5) {
+                category = currentLang === 'darija' ? "Nqess Fl Wzn (Maigreur)" : "Insuffisance pondérale";
+                color = "#EAB308"; bgColor = "#FEFCE8";
+            } else if (bmi < 25) {
+                category = currentLang === 'darija' ? "Wzn Mzyan (Normal)" : "Poids normal";
+                color = "#22C55E"; bgColor = "#F0FDF4";
+            } else if (bmi < 30) {
+                category = currentLang === 'darija' ? "Zayd shwia fl Wzn (Surpoids)" : "Surpoids";
+                color = "#F97316"; bgColor = "#FFF7ED";
+            } else {
+                category = currentLang === 'darija' ? "Smen (Obésité)" : "Obésité";
+                color = "#EF4444"; bgColor = "#FEF2F2";
+            }
+
+            resultDiv.innerHTML = `IMC: ${bmi.toFixed(1)} <br/> <span style="font-size: 14px; opacity: 0.9;">${category}</span>`;
+            resultDiv.style.color = color;
+            resultDiv.style.backgroundColor = bgColor;
+            resultDiv.classList.remove('hidden');
+        });
+    }
 
     // Initial render
     renderDirectoryCards(emergenciesData, 'emergencies-grid');
@@ -151,16 +206,16 @@ function initNavigation() {
 
             switch(targetId) {
                 case 'view-pharmacies':
-                    appTitle.textContent = "Sydalty";
-                    appSubtitle.textContent = "Oujda Local Services";
+                    appTitle.textContent = "SYDALIATI";
+                    appSubtitle.textContent = t("subtitle_local_services");
                     break;
                 case 'view-tools':
-                    appTitle.textContent = "Medical Directory";
-                    appSubtitle.textContent = "Urgences, Docs & Labs";
+                    appTitle.textContent = t("tools_directory_title");
+                    appSubtitle.textContent = t("pill_emergencies") + ", " + t("pill_doctors") + ' & Labos';
                     break;
                 case 'view-profile':
-                    appTitle.textContent = "My Profile";
-                    appSubtitle.textContent = "Manage Account & Preferences";
+                    appTitle.textContent = t("tab_profile");
+                    appSubtitle.textContent = t("settings_language") + ' & Sync';
                     break;
             }
         });
@@ -181,6 +236,48 @@ function initAuthForms() {
     });
 }
 
+// --- Google Sign-In Logic ---
+window.handleCredentialResponse = function(response) {
+    // Decode the JWT Payload to get user info
+    const responsePayload = decodeJwtResponse(response.credential);
+    
+    // Hide Auth forms & dividers
+    document.querySelector('.g_id_signin').classList.add('hidden');
+    document.getElementById('auth-divider').classList.add('hidden');
+    document.querySelector('.login-tabs').classList.add('hidden');
+    authForms.forEach(f => f.classList.add('hidden'));
+
+    // Populate user data
+    document.getElementById('user-name').textContent = responsePayload.name;
+    document.getElementById('user-email').textContent = responsePayload.email;
+    document.getElementById('user-avatar').src = responsePayload.picture;
+    
+    // Show logged-in profile container
+    document.getElementById('user-profile-data').classList.remove('hidden');
+};
+
+window.signOut = function() {
+    // Hide user data
+    document.getElementById('user-profile-data').classList.add('hidden');
+    
+    // Show Auth forms
+    document.querySelector('.g_id_signin').classList.remove('hidden');
+    document.getElementById('auth-divider').classList.remove('hidden');
+    document.querySelector('.login-tabs').classList.remove('hidden');
+    
+    // Reset to phone form active
+    loginTabs[0].click();
+};
+
+function decodeJwtResponse(token) {
+    let base64Url = token.split('.')[1];
+    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    let jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+}
+
 // --- App Logic: Pharmacies Locator ---
 function requestLocation() {
     setStatus("");
@@ -188,12 +285,12 @@ function requestLocation() {
     pharmacyList.innerHTML = '';
 
     if (mockPharmacies.length === 0) {
-        setStatus("Pharmacies list is still loading or failed. Please refresh.", true);
+        setStatus(t('error_list_loading'), true);
         return;
     }
     
     if (!navigator.geolocation) {
-        setStatus("Geolocation is not supported by your browser.", true);
+        setStatus(t('errorLine_geolocation'), true);
         return;
     }
 
@@ -207,8 +304,8 @@ function requestLocation() {
         },
         error => {
             setLoading(false);
-            let msg = "Unable to retrieve your location.";
-            if (error.code === 1) msg = "Please allow location access to find nearby pharmacies.";
+            let msg = t('error_location_general');
+            if (error.code === 1) msg = t('error_location_denied');
             setStatus(msg, true);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -240,8 +337,8 @@ function renderPharmacies(pharmacies) {
         clone.querySelector('.address-text').textContent = pharmacy.address;
         
         let distanceText = "";
-        if (pharmacy.distance < 1) distanceText = `${Math.round(pharmacy.distance * 1000)} m away`;
-        else distanceText = `${pharmacy.distance.toFixed(1)} km away`;
+        if (pharmacy.distance < 1) distanceText = `${Math.round(pharmacy.distance * 1000)} m ${currentLang === 'darija' ? '' : 'away'}`;
+        else distanceText = `${pharmacy.distance.toFixed(1)} km ${currentLang === 'darija' ? '' : 'away'}`;
         clone.querySelector('.distance-value').textContent = distanceText;
         
         const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${pharmacy.lat},${pharmacy.lng}`;
@@ -255,12 +352,12 @@ function renderPharmacies(pharmacies) {
 function setLoading(isLoading) {
     if (isLoading) {
         locateBtn.classList.add('loading');
-        locateBtn.querySelector('span').textContent = 'Finding...';
+        locateBtn.querySelector('span').textContent = t('btn_finding');
         locateBtn.querySelector('i').className = 'fa-solid fa-circle-notch';
         locateBtn.disabled = true;
     } else {
         locateBtn.classList.remove('loading');
-        locateBtn.querySelector('span').textContent = 'Find Nearest Pharmacy';
+        locateBtn.querySelector('span').textContent = t('btn_find_pharmacy');
         locateBtn.querySelector('i').className = 'fa-solid fa-location-crosshairs';
         locateBtn.disabled = false;
     }
