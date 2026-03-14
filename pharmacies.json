@@ -1,0 +1,18 @@
+[
+  {
+    "id": "fallback_1",
+    "name": "Pharmacie Al Maghreb Al Arabi",
+    "address": "Bd Mohammed V, Oujda",
+    "phone": "+212 5366-81234",
+    "lat": 34.6814,
+    "lng": -1.9086
+  },
+  {
+    "id": "fallback_2",
+    "name": "Pharmacie de la Paix",
+    "address": "Avenue Allal Ben Abdallah",
+    "phone": "+212 5366-99112",
+    "lat": 34.685,
+    "lng": -1.895
+  }
+]

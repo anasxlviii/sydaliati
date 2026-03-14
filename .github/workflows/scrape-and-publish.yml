@@ -1,0 +1,62 @@
+name: Daily Scrape & Publish Pharmacy Data
+
+on:
+  schedule:
+    # Runs at 01:00 UTC every day
+    - cron: '0 1 * * *'
+  # Allows manual triggering from the Actions tab
+  workflow_dispatch:
+
+# SECURITY PRINCIPLE: Principle of Least Privilege
+# Limit the permissions granted to the GITHUB_TOKEN
+permissions:
+  contents: write # Needed to commit the updated pharmacies.json
+  pull-requests: read
+  actions: read
+
+jobs:
+  scrape-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+        with:
+          # Ensure we fetch full history to allow successful pushing
+          fetch-depth: 0
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'scraper/package-lock.json'
+
+      - name: Install Secure Dependencies
+        working-directory: ./scraper
+        # Using npm ci ensures deterministic, clean installs based strictly on package-lock.json
+        run: npm ci
+
+      - name: Run Web Scraper Backend
+        working-directory: ./scraper
+        run: node index.js
+
+      - name: Check for generated data changes
+        id: check_changes
+        run: |
+          if [ -n "$(git status --porcelain pharmacies.json)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+            echo "No changes in pharmacy data today."
+          fi
+
+      - name: Commit and Push Updated Data
+        if: steps.check_changes.outputs.changes == 'true'
+        run: |
+          # Use secure, generic bot credentials for the commit
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pharmacies.json
+          git commit -m "chore(data): auto-update daily guard pharmacies [skip ci]"
+          git push
